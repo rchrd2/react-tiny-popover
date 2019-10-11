@@ -1,9 +1,9 @@
 {
   "name": "@meikidd/react-tiny-popover",
-  "version": "3.4.6",
+  "version": "3.4.8",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alexkatz/react-tiny-popover.git"
+    "url": "https://github.com/meikidd/react-tiny-popover.git"
   },
   "main": "dist/Popover.js",
   "types": "dist/index.d.ts",
@@ -16,9 +16,10 @@
     "out"
   ],
   "license": "MIT",
-  "author": "Alex Katz",
+  "author": "meikidd",
   "description": "A simple and highly customizable popover react higher order component with no other dependencies! Typescript friendly.",
   "scripts": {
+    "build:type": "cp src/index.d.ts dist/index.d.ts",
     "build": "tsc -p .",
     "watch": "webpack --watch --mode=development",
     "start-demo": "cd docs && yarn start"
