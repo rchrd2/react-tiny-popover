@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { findDOMNode, unstable_renderSubtreeIntoContainer } from 'react-dom';
+import { unstable_renderSubtreeIntoContainer } from 'react-dom';
 import { Constants, arrayUnique } from './util';
 import { ArrowContainer } from './ArrowContainer';
 import { PopoverProps, ContentRenderer, ContentRendererArgs, Position, Align, ContentLocation } from './index';
@@ -24,13 +24,11 @@ class Popover extends React.Component<PopoverProps, {}> {
     public componentDidMount() {
         window.setTimeout(() => this.willMount = false);
         const { position, isOpen } = this.props;
-        this.target = findDOMNode(this) as Element;
         this.positionOrder = this.getPositionPriorityOrder(position);
         this.updatePopover(isOpen);
     }
 
     public componentDidUpdate(prevProps: PopoverProps) {
-        if (this.target == null) { this.target = findDOMNode(this) as Element; }
 
         const { isOpen: prevIsOpen, position: prevPosition, content: prevBody } = prevProps;
         const { isOpen, content, position } = this.props;
@@ -64,8 +62,14 @@ class Popover extends React.Component<PopoverProps, {}> {
         this.removePopover();
     }
 
+    handleRef = (elm: Element) => {
+        this.target = elm;
+    }
+
     public render() {
-        return this.props.children;
+        return React.cloneElement(this.props.children as JSX.Element, {
+            ref: this.handleRef,
+        });
     }
 
     private updatePopover(isOpen: boolean) {
