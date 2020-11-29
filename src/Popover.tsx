@@ -21,6 +21,13 @@ class Popover extends React.Component<PopoverProps, {}> {
         containerClassName: Constants.POPOVER_CONTAINER_CLASS_NAME,
     };
 
+    constructor(props: PopoverProps) {
+        super(props);
+
+        this.willUnmount = false;
+        this.willMount = true;
+    }
+
     public componentDidMount() {
         window.setTimeout(() => this.willMount = false);
         const { position, isOpen } = this.props;
@@ -50,11 +57,6 @@ class Popover extends React.Component<PopoverProps, {}> {
 
             this.updatePopover(isOpen);
         }
-    }
-
-    public componentWillMount() {
-        this.willUnmount = false;
-        this.willMount = true;
     }
 
     public componentWillUnmount() {
