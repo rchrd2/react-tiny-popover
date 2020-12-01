@@ -203,3 +203,5 @@ export const Popover = forwardRef<HTMLElement, PopoverProps>(
     );
   },
 );
+
+export default Popover;

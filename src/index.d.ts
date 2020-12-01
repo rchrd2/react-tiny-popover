@@ -90,3 +90,5 @@ export const useArrowContainer: (props: UseArrowContainerProps) => UseArrowConta
 
 export const Popover: React.FC<PopoverProps>;
 export const ArrowContainer: React.FC<ArrowContainerProps>;
+
+export default Popover;
