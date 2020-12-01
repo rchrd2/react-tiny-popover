@@ -1,312 +1,205 @@
-import * as React from 'react';
-import { findDOMNode, unstable_renderSubtreeIntoContainer } from 'react-dom';
-import { Constants, arrayUnique } from './util';
-import { ArrowContainer } from './ArrowContainer';
-import { PopoverProps, ContentRenderer, ContentRendererArgs, Position, Align, ContentLocation } from './index';
+import React, {
+  useRef,
+  useLayoutEffect,
+  useState,
+  useCallback,
+  useEffect,
+  forwardRef,
+} from 'react';
+import { PopoverPortal } from './PopoverPortal';
+import { PopoverProps, PopoverState } from '.';
+import { Constants, rectsAreEqual } from './util';
+import { usePopover } from './usePopover';
+import { useMemoizedArray } from './useMemoizedArray';
 
-class Popover extends React.Component<PopoverProps, {}> {
-    private target: Element = null;
-    private targetRect: ClientRect = null;
-    private targetPositionIntervalHandler: number = null;
-    private popoverDiv: HTMLDivElement = null;
-    private positionOrder: Position[] = null;
-    private willUnmount = false;
-    private willMount = false;
+export { useArrowContainer } from './useArrowContainer';
+export { ArrowContainer } from './ArrowContainer';
+export { usePopover };
 
-    public static defaultProps: Partial<PopoverProps> = {
-        padding: Constants.DEFAULT_PADDING,
-        windowBorderPadding: Constants.DEFAULT_WINDOW_PADDING,
-        position: ['top', 'right', 'left', 'bottom'],
-        align: 'center',
-        containerClassName: Constants.POPOVER_CONTAINER_CLASS_NAME,
+export const Popover = forwardRef<HTMLElement, PopoverProps>(
+  (
+    {
+      isOpen,
+      children,
+      content,
+      reposition = true,
+      containerStyle,
+      containerParent = window.document.body,
+      containerClassName = 'react-tiny-popover-container',
+      contentLocation,
+      positions: externalPositions = Constants.DEFAULT_POSITIONS,
+      padding = 0,
+      align = Constants.DEFAULT_ALIGN,
+      boundaryInset = 0,
+      boundaryTolerance = 0,
+      onClickOutside,
+    },
+    externalRef,
+  ) => {
+    const positions = useMemoizedArray(externalPositions);
+    const childRef = useRef<HTMLElement>();
+
+    const [popoverState, setPopoverState] = useState<PopoverState>({
+      isPositioned: false,
+      align,
+      nudgedLeft: 0,
+      nudgedTop: 0,
+      position: positions[0],
+      padding,
+      childRect: Constants.EMPTY_CLIENT_RECT,
+      popoverRect: Constants.EMPTY_CLIENT_RECT,
+      parentRect: Constants.EMPTY_CLIENT_RECT,
+      boundaryInset,
+      boundaryTolerance,
+    });
+
+    const onPositionPopover = useCallback(
+      (popoverState: PopoverState) => setPopoverState(popoverState),
+      [],
+    );
+
+    const [positionPopover, popoverRef] = usePopover({
+      childRef,
+      containerClassName,
+      containerParent,
+      contentLocation,
+      positions,
+      align,
+      padding,
+      boundaryTolerance,
+      boundaryInset,
+      reposition,
+      onPositionPopover,
+    });
+
+    useLayoutEffect(() => {
+      let shouldUpdatePopover = true;
+      const updatePopover = () => {
+        if (isOpen) {
+          const childRect = childRef.current.getBoundingClientRect();
+          const popoverRect = popoverRef.current.getBoundingClientRect();
+          if (
+            !rectsAreEqual(childRect, {
+              top: popoverState.childRect.top,
+              left: popoverState.childRect.left,
+              width: popoverState.childRect.width,
+              height: popoverState.childRect.height,
+              bottom: popoverState.childRect.top + popoverState.childRect.height,
+              right: popoverState.childRect.left + popoverState.childRect.width,
+            }) ||
+            popoverRect.width !== popoverState.popoverRect.width ||
+            popoverRect.height !== popoverState.popoverRect.height
+          ) {
+            positionPopover();
+          }
+
+          if (shouldUpdatePopover) {
+            window.requestAnimationFrame(updatePopover);
+          }
+        } else {
+          setPopoverState((prev) => ({ ...prev, isPositioned: false }));
+        }
+      };
+
+      window.requestAnimationFrame(updatePopover);
+
+      return () => {
+        shouldUpdatePopover = false;
+      };
+    }, [
+      isOpen,
+      popoverRef,
+      popoverState.childRect.width,
+      popoverState.childRect.height,
+      popoverState.childRect.top,
+      popoverState.childRect.left,
+      popoverState.popoverRect.width,
+      popoverState.popoverRect.height,
+      positionPopover,
+      align,
+      padding,
+      positions,
+      reposition,
+      boundaryInset,
+    ]);
+
+    useEffect(() => {
+      const popoverElement = popoverRef.current;
+      const style = {
+        ...Constants.DEFAULT_CONTAINER_STYLE,
+        ...containerStyle,
+      } as Omit<CSSStyleDeclaration, 'length' | 'parentRule'>;
+
+      if (popoverState.isPositioned) {
+        Object.assign(popoverElement.style, style);
+      }
+
+      return () => {
+        Object.keys(style).forEach(
+          (key) => (popoverElement.style[key as keyof typeof style] = null),
+        );
+      };
+    }, [popoverState.isPositioned, containerStyle, popoverRef]);
+
+    const handleOnClickOutside = useCallback(
+      (e: MouseEvent) => {
+        if (
+          isOpen &&
+          !popoverRef.current.contains(e.target as Node) &&
+          !childRef.current.contains(e.target as Node)
+        ) {
+          onClickOutside?.(e);
+        }
+      },
+      [isOpen, onClickOutside, popoverRef],
+    );
+
+    const handleWindowResize = useCallback(() => {
+      window.requestAnimationFrame(positionPopover);
+    }, [positionPopover]);
+
+    useEffect(() => {
+      window.addEventListener('click', handleOnClickOutside);
+      window.addEventListener('resize', handleWindowResize);
+      return () => {
+        window.removeEventListener('click', handleOnClickOutside);
+        window.removeEventListener('resize', handleWindowResize);
+      };
+    }, [handleOnClickOutside, handleWindowResize]);
+
+    const handleRef = useCallback(
+      (node: HTMLElement) => {
+        childRef.current = node;
+        if (externalRef != null) {
+          if (typeof externalRef === 'object') {
+            (externalRef as React.MutableRefObject<HTMLElement>).current = node;
+          } else if (typeof externalRef === 'function') {
+            (externalRef as (instance: HTMLElement) => void)(node);
+          }
+        }
+      },
+      [externalRef],
+    );
+
+    const renderChild = () =>
+      React.cloneElement(children as JSX.Element, {
+        ref: handleRef,
+      });
+
+    const renderPopover = () => {
+      if (!isOpen) return null;
+      return (
+        <PopoverPortal element={popoverRef.current} container={containerParent}>
+          {typeof content === 'function' ? content(popoverState) : content}
+        </PopoverPortal>
+      );
     };
 
-    public componentDidMount() {
-        window.setTimeout(() => this.willMount = false);
-        const { position, isOpen } = this.props;
-        this.target = findDOMNode(this) as Element;
-        this.positionOrder = this.getPositionPriorityOrder(position);
-        this.updatePopover(isOpen);
-    }
-
-    public componentDidUpdate(prevProps: PopoverProps) {
-        if (this.target == null) { this.target = findDOMNode(this) as Element; }
-
-        const { isOpen: prevIsOpen, position: prevPosition, content: prevBody } = prevProps;
-        const { isOpen, content, position } = this.props;
-
-        this.positionOrder = this.getPositionPriorityOrder(this.props.position);
-
-        const hasNewDestination = prevProps.contentDestination !== this.props.contentDestination;
-
-        if (
-            prevIsOpen !== isOpen || 
-            prevBody !== content || 
-            prevPosition !== position || 
-            hasNewDestination
-        ) {
-            if (hasNewDestination) {
-                this.removePopover();
-                this.popoverDiv && this.popoverDiv.remove();
-            }
-
-            this.updatePopover(isOpen);
-        }
-    }
-
-    public componentWillMount() {
-        this.willUnmount = false;
-        this.willMount = true;
-    }
-
-    public componentWillUnmount() {
-        this.willUnmount = true;
-        this.removePopover();
-    }
-
-    public render() {
-        return this.props.children;
-    }
-
-    private updatePopover(isOpen: boolean) {
-        if (isOpen && this.target != null) {
-            if (!this.popoverDiv || !this.popoverDiv.parentNode) {
-                const { transitionDuration } = this.props;
-                this.popoverDiv = this.createContainer();
-                this.popoverDiv.style.opacity = '0';
-                this.popoverDiv.style.transition = `opacity ${transitionDuration || Constants.FADE_TRANSITION}s`;
-                (this.props.contentDestination || window.document.body).appendChild(this.popoverDiv);
-                window.addEventListener('resize', this.onResize);
-                window.addEventListener('click', this.onClick);
-            }
-            this.renderPopover();
-        } else if (this.popoverDiv && this.popoverDiv.parentNode) {
-            this.removePopover();
-        }
-    }
-
-    private renderPopover(positionIndex: number = 0) {
-        if (positionIndex >= this.positionOrder.length) {
-            this.removePopover();
-            return;
-        }
-
-        this.renderWithPosition({ position: this.positionOrder[positionIndex], targetRect: this.target.getBoundingClientRect() }, (violation, rect) => {
-            const { disableReposition, contentLocation } = this.props;
-
-            if (violation && !disableReposition && !(typeof contentLocation === 'object')) {
-                this.renderPopover(positionIndex + 1);
-            } else {
-                const { contentLocation, align } = this.props;
-                const { top: nudgedTop, left: nudgedLeft } = this.getNudgedPopoverPosition(rect);
-                const { top: rectTop, left: rectLeft } = rect;
-                const position = this.positionOrder[positionIndex];
-                let { top, left } = disableReposition ? { top: rectTop, left: rectLeft } : { top: nudgedTop, left: nudgedLeft };
-                
-                if (contentLocation) {
-                    const targetRect = this.target.getBoundingClientRect();
-                    const popoverRect = this.popoverDiv.getBoundingClientRect();
-                    ({ top, left } = typeof contentLocation === 'function' ? contentLocation({ targetRect, popoverRect, position, align, nudgedLeft, nudgedTop }) : contentLocation);
-                    this.popoverDiv.style.left = `${left.toFixed()}px`;
-                    this.popoverDiv.style.top = `${top.toFixed()}px`;
-                } else {
-                    let destinationTopOffset = 0;
-                    let destinationLeftOffset = 0;
-                    
-                    if (this.props.contentDestination) {
-                        const destRect = this.props.contentDestination.getBoundingClientRect();
-                        destinationTopOffset = -destRect.top;
-                        destinationLeftOffset = -destRect.left;
-                    }
-
-                    const [absoluteTop, absoluteLeft] = [top + window.pageYOffset, left + window.pageXOffset];
-                    const finalLeft = absoluteLeft + destinationTopOffset;
-                    const finalTop = absoluteTop + destinationLeftOffset;
-
-                    this.popoverDiv.style.left = `${finalLeft.toFixed()}px`;
-                    this.popoverDiv.style.top = `${finalTop.toFixed()}px`;
-                }
-
-                this.popoverDiv.style.width = null;
-                this.popoverDiv.style.height = null;
-
-                this.renderWithPosition({
-                    position,
-                    nudgedTop: nudgedTop - rect.top,
-                    nudgedLeft: nudgedLeft - rect.left,
-                    targetRect: this.target.getBoundingClientRect(),
-                    popoverRect: this.popoverDiv.getBoundingClientRect(),
-                }, () => {
-                    this.startTargetPositionListener(10);
-                    if (this.popoverDiv.style.opacity !== '1') {
-                        this.popoverDiv.style.opacity = '1';
-                    }
-                });
-            }
-        });
-    }
-
-    private startTargetPositionListener(checkInterval: number) {
-        if (this.targetPositionIntervalHandler === null) {
-            this.targetPositionIntervalHandler = window.setInterval(() => {
-                const newTargetRect = this.target.getBoundingClientRect();
-                if (this.targetPositionHasChanged(this.targetRect, newTargetRect)) {
-                    this.renderPopover();
-                }
-                this.targetRect = newTargetRect;
-            }, checkInterval);
-        }
-    }
-
-    private renderWithPosition(
-        { position, nudgedLeft = 0, nudgedTop = 0, targetRect = Constants.EMPTY_CLIENT_RECT, popoverRect = Constants.EMPTY_CLIENT_RECT }: Partial<ContentRendererArgs>,
-        callback?: (boundaryViolation: boolean, resultingRect: Partial<ClientRect>) => void,
-    ) {
-        const { windowBorderPadding: padding, content, align } = this.props;
-        const getContent = (args: ContentRendererArgs): JSX.Element =>
-            typeof content === 'function'
-                ? content(args)
-                : content;
-
-        unstable_renderSubtreeIntoContainer(this, getContent({ position, nudgedLeft, nudgedTop, targetRect, popoverRect, align }), this.popoverDiv, () => {
-            if (this.willUnmount) {
-                return;
-            }
-            const targetRect = this.target.getBoundingClientRect();
-            const popoverRect = this.popoverDiv.getBoundingClientRect();
-            const { top, left } = this.getLocationForPosition(position, targetRect, popoverRect);
-            callback(
-                position === 'top' && top < padding ||
-                position === 'left' && left < padding ||
-                position === 'right' && left + popoverRect.width > window.innerWidth - padding ||
-                position === 'bottom' && top + popoverRect.height > window.innerHeight - padding,
-                { width: popoverRect.width, height: popoverRect.height, top, left },
-            );
-        });
-    }
-
-    private getNudgedPopoverPosition({ top, left, width, height }: Partial<ClientRect>): ContentLocation {
-        const { windowBorderPadding: padding } = this.props;
-
-        
-        top = top < padding ? padding : top;
-        top = top + height > window.innerHeight - padding ? window.innerHeight - padding - height : top;
-        left = left < padding ? padding : left;
-        left = left + width > window.innerWidth - padding ? window.innerWidth - padding - width : left;
-        return { top, left };
-    }
-
-    private removePopover() {
-        if (this.popoverDiv) {
-            const { transitionDuration } = this.props;
-            this.popoverDiv.style.opacity = '0';
-            const remove = () => {
-                if (this.willUnmount || !this.props.isOpen || !this.popoverDiv.parentNode) {
-                    window.clearInterval(this.targetPositionIntervalHandler);
-                    window.removeEventListener('resize', this.onResize);
-                    window.removeEventListener('click', this.onClick);
-                    this.targetPositionIntervalHandler = null;
-                    if (this.popoverDiv.parentNode) {
-                        this.popoverDiv.parentNode.removeChild(this.popoverDiv);
-                    }
-                }
-            };
-            if (!this.willUnmount) {
-                window.setTimeout(remove, (transitionDuration || Constants.FADE_TRANSITION) * 1000);
-            } else {
-                remove();
-            }
-        }
-    }
-
-    private onResize = (e: any) => {
-        this.renderPopover();
-    }
-
-    private onClick = (e: MouseEvent) => {
-        const { onClickOutside, isOpen } = this.props;
-        if (!this.willUnmount && !this.willMount && !this.popoverDiv.contains(e.target as Node) && !this.target.contains(e.target as Node) && onClickOutside && isOpen) {
-            onClickOutside(e);
-        }
-    }
-
-    private getPositionPriorityOrder(position: Position | Position[]): Position[] {
-        if (position && typeof position !== 'string') {
-            if (Constants.DEFAULT_POSITIONS.every(defaultPosition => position.find(p => p === defaultPosition) !== undefined)) {
-                return arrayUnique(position);
-            } else {
-                const remainingPositions = Constants.DEFAULT_POSITIONS.filter(defaultPosition => position.find(p => p === defaultPosition) === undefined);
-                return arrayUnique([...position, ...remainingPositions]);
-            }
-        } else if (position && typeof position === 'string') {
-            const remainingPositions = Constants.DEFAULT_POSITIONS.filter(defaultPosition => defaultPosition !== position);
-            return arrayUnique([position, ...remainingPositions]);
-        }
-    }
-
-    private createContainer(): HTMLDivElement {
-        const { containerStyle, containerClassName } = this.props;
-        const container = window.document.createElement('div');
-
-        container.style.overflow = 'hidden';
-
-        if (containerStyle) {
-            Object.keys(containerStyle).forEach(key => container.style[key as any] = (containerStyle as CSSStyleDeclaration)[key as any]);
-        }
-
-        container.className = containerClassName;
-        container.style.position = 'absolute';
-        container.style.top = '0';
-        container.style.left = '0';
-
-        return container;
-    }
-
-    private getLocationForPosition(position: Position, newTargetRect: ClientRect, popoverRect: ClientRect): ContentLocation {
-        const { padding, align } = this.props;
-        const targetMidX = newTargetRect.left + (newTargetRect.width / 2);
-        const targetMidY = newTargetRect.top + (newTargetRect.height / 2);
-        let top: number;
-        let left: number;
-
-        switch (position) {
-            case 'top':
-                top = newTargetRect.top - popoverRect.height - padding;
-                left = targetMidX - (popoverRect.width / 2);
-                if (align === 'start') { left = newTargetRect.left; }
-                if (align === 'end') { left = newTargetRect.right - popoverRect.width; }
-                break;
-            case 'left':
-                top = targetMidY - (popoverRect.height / 2);
-                left = newTargetRect.left - padding - popoverRect.width;
-                if (align === 'start') { top = newTargetRect.top; }
-                if (align === 'end') { top = newTargetRect.bottom - popoverRect.height; }
-                break;
-            case 'bottom':
-                top = newTargetRect.bottom + padding;
-                left = targetMidX - (popoverRect.width / 2);
-                if (align === 'start') { left = newTargetRect.left; }
-                if (align === 'end') { left = newTargetRect.right - popoverRect.width; }
-                break;
-            case 'right':
-                top = targetMidY - (popoverRect.height / 2);
-                left = newTargetRect.right + padding;
-                if (align === 'start') { top = newTargetRect.top; }
-                if (align === 'end') { top = newTargetRect.bottom - popoverRect.height; }
-                break;
-        }
-
-        return { top, left };
-    }
-
-    private targetPositionHasChanged(oldTargetRect: ClientRect, newTargetRect: ClientRect): boolean { // could move to a utilities file, along with some others potentially
-        return oldTargetRect === null
-            || oldTargetRect.left !== newTargetRect.left
-            || oldTargetRect.top !== newTargetRect.top
-            || oldTargetRect.width !== newTargetRect.width
-            || oldTargetRect.height !== newTargetRect.height;
-    }
-}
-
-export { ArrowContainer };
-export default Popover;
+    return (
+      <>
+        {renderChild()}
+        {renderPopover()}
+      </>
+    );
+  },
+);
