@@ -8,7 +8,7 @@ interface PopoverPortalProps {
 
 const PopoverPortal: React.FC<PopoverPortalProps> = ({ container, element, children }) => {
   useLayoutEffect(() => {
-    container.appendChild(element);
+    (container || window.document.body).appendChild(element);
     return () => container.removeChild(element);
   }, [container, element]);
 

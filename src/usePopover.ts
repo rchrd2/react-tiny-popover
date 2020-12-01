@@ -28,7 +28,7 @@ export const usePopover = ({
       positionIndex: number = 0,
       childRect: ClientRect = childRef.current.getBoundingClientRect(),
       popoverRect: ClientRect = popoverRef.current.getBoundingClientRect(),
-      parentRect: ClientRect = containerParent.getBoundingClientRect(),
+      parentRect: ClientRect = (containerParent || window.document.body).getBoundingClientRect(),
     ) => {
       if (contentLocation) {
         const { top, left } =

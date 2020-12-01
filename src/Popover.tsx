@@ -24,7 +24,7 @@ export const Popover = forwardRef<HTMLElement, PopoverProps>(
       content,
       reposition = true,
       containerStyle,
-      containerParent = window.document.body,
+      containerParent,
       containerClassName = 'react-tiny-popover-container',
       contentLocation,
       positions: externalPositions = Constants.DEFAULT_POSITIONS,
