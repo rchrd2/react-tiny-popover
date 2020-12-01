@@ -36,6 +36,12 @@ export const Popover = forwardRef<HTMLElement, PopoverProps>(
     },
     externalRef,
   ) => {
+
+    if (typeof window === 'undefined') {
+      // server side rendering
+      return <>{children}</>
+    }
+
     const positions = useMemoizedArray(externalPositions);
     const childRef = useRef<HTMLElement>();
 
