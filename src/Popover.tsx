@@ -81,7 +81,7 @@ export const Popover = forwardRef<HTMLElement, PopoverProps>(
     useLayoutEffect(() => {
       let shouldUpdatePopover = true;
       const updatePopover = () => {
-        if (isOpen) {
+        if (isOpen && childRef.current && popoverRef.current) {
           const childRect = childRef.current.getBoundingClientRect();
           const popoverRect = popoverRef.current.getBoundingClientRect();
           if (
