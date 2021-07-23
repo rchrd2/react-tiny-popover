@@ -26,7 +26,8 @@
     "clean": "rm -rf dist/",
     "copy-types": "cp src/index.d.ts dist/index.d.ts",
     "start-demo": "cd docs && yarn start",
-    "watch": "tsc-watch -p . --onSuccess 'yarn copy-types'"
+    "watch": "tsc-watch -p . --onSuccess 'yarn copy-types'",
+    "prepare": "yarn run build"
   },
   "devDependencies": {
     "@types/react": "^16.8.23",
